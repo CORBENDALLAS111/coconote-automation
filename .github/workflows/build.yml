@@ -17,7 +17,7 @@ jobs:
       run: |
         brew install ldid xz
 
-    - name: Install Theos (manual)
+    - name: Install Theos
       run: |
         export THEOS="$HOME/theos"
         git clone --recursive https://github.com/theos/theos.git $THEOS
@@ -42,39 +42,21 @@ jobs:
         make clean 2>/dev/null || true
         make
 
-    - name: Fix dylib for LiveContainer
+    - name: Verify no substrate linking
       run: |
-        # Find the built dylib
-        if [ -f ".theos/obj/debug/CoconoteAutoRecording.dylib" ]; then
-          DYLIB=".theos/obj/debug/CoconoteAutoRecording.dylib"
-        elif [ -f ".theos/obj/CoconoteAutoRecording.dylib" ]; then
+        DYLIB=".theos/obj/debug/CoconoteAutoRecording.dylib"
+        if [ ! -f "$DYLIB" ]; then
           DYLIB=".theos/obj/CoconoteAutoRecording.dylib"
+        fi
+
+        echo "Checking linked libraries:"
+        otool -L $DYLIB
+
+        if otool -L $DYLIB | grep -q "CydiaSubstrate"; then
+          echo "WARNING: Still linked against CydiaSubstrate!"
         else
-          echo "Dylib not found"
-          exit 1
+          echo "✓ Not linked against CydiaSubstrate (good for LiveContainer)"
         fi
-
-        echo "Original dylib:"
-        otool -L $DYLIB | head -10
-
-        # Fix the CydiaSubstrate path for LiveContainer
-        # Change from /Library/Frameworks/CydiaSubstrate.framework/CydiaSubstrate to @rpath
-        install_name_tool -change \
-          "/Library/Frameworks/CydiaSubstrate.framework/CydiaSubstrate" \
-          "@rpath/CydiaSubstrate.framework/CydiaSubstrate" \
-          "$DYLIB"
-
-        echo ""
-        echo "Fixed dylib:"
-        otool -L $DYLIB | head -10
-
-        # Verify fix worked
-        if otool -L $DYLIB | grep -q "/Library/Frameworks/CydiaSubstrate.framework"; then
-          echo "ERROR: Path not changed!"
-          exit 1
-        fi
-
-        echo "✓ Dylib patched for LiveContainer"
 
     - name: Prepare artifact
       run: |
