@@ -1,8 +1,8 @@
 Package: com.yourname.coconoteautorecording
 Name: CoconoteAutoRecording
-Version: 1.0.1
+Version: 1.0.2
 Architecture: iphoneos-arm
-Description: Auto-tap automation for Coconote recording (iOS 26 compatible)
+Description: Auto-tap automation for Coconote (LiveContainer compatible)
 Maintainer: You
 Author: You
 Section: Tweaks

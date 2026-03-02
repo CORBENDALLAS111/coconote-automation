@@ -1,5 +1,6 @@
 #import <UIKit/UIKit.h>
 #import <AVFoundation/AVFoundation.h>
+#import <dlfcn.h>
 
 static NSTimer *autoTimer = nil;
 static NSTimer *keepAlive = nil;
@@ -7,6 +8,13 @@ static int step = 0;
 static BOOL done = NO;
 static UIView *tapCircle = nil;
 static UILabel *watermark = nil;
+
+// Function pointers for hooking (loaded via dlsym from LiveContainer's ElleKit)
+typedef void (*MSHookMessageEx_t)(Class _class, SEL message, IMP hook, IMP *old);
+static MSHookMessageEx_t MSHookMessageEx_p = NULL;
+
+// Original function pointer
+static void (*orig_applicationDidBecomeActive)(id self, SEL _cmd, UIApplication *application) = NULL;
 
 UIWindow* getActiveWindow() {
     if (@available(iOS 13.0, *)) {
@@ -39,14 +47,6 @@ void showTapCircle(CGFloat x, CGFloat y) {
     tapCircle.layer.borderWidth = 3;
     tapCircle.layer.borderColor = [UIColor whiteColor].CGColor;
     tapCircle.userInteractionEnabled = NO;
-
-    CABasicAnimation *pulse = [CABasicAnimation animationWithKeyPath:@"transform.scale"];
-    pulse.fromValue = @1.0;
-    pulse.toValue = @1.3;
-    pulse.duration = 0.3;
-    pulse.autoreverses = YES;
-    pulse.repeatCount = 2;
-    [tapCircle.layer addAnimation:pulse forKey:@"pulse"];
 
     [win addSubview:tapCircle];
 
@@ -154,12 +154,19 @@ void nextStep() {
     }
 }
 
-%hook UIApplication
-- (void)applicationDidBecomeActive:(UIApplication *)application {
-    %orig;
+// Hook function
+void hooked_applicationDidBecomeActive(id self, SEL _cmd, UIApplication *application) {
+    // Call original
+    if (orig_applicationDidBecomeActive) {
+        orig_applicationDidBecomeActive(self, _cmd, application);
+    }
+
+    // Show watermark
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         showWatermark();
     });
+
+    // Start automation
     if (!done && step == 0) {
         updateWatermark(@"🎙️ Starting in 3s...");
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
@@ -167,6 +174,28 @@ void nextStep() {
         });
     }
 }
-%end
 
-__attribute__((constructor)) static void init() { }
+__attribute__((constructor))
+static void init() {
+    NSLog(@"[Coconote] Tweak loading...");
+
+    // Get MSHookMessageEx from LiveContainer's ElleKit/Substrate
+    MSHookMessageEx_p = (MSHookMessageEx_t)dlsym(RTLD_DEFAULT, "MSHookMessageEx");
+
+    if (!MSHookMessageEx_p) {
+        NSLog(@"[Coconote] ERROR: MSHookMessageEx not found!");
+        return;
+    }
+
+    NSLog(@"[Coconote] MSHookMessageEx found, hooking...");
+
+    // Hook UIApplication applicationDidBecomeActive:
+    MSHookMessageEx_p(
+        [UIApplication class],
+        @selector(applicationDidBecomeActive:),
+        (IMP)hooked_applicationDidBecomeActive,
+        (IMP *)&orig_applicationDidBecomeActive
+    );
+
+    NSLog(@"[Coconote] Hook installed successfully!");
+}
