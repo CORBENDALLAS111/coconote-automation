@@ -1,0 +1,8 @@
+Package: com.yourname.coconoteautorecording
+Name: CoconoteAutoRecording
+Version: 1.0.0
+Architecture: iphoneos-arm
+Description: Auto-tap automation for Coconote recording
+Maintainer: You
+Author: You
+Section: Tweaks
