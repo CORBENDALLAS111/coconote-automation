@@ -1,0 +1,29 @@
+name: Build CoconoteAutoRecording.dylib
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+      
+    - name: Setup Theos
+      run: |
+        bash -c "$(curl -fsSL https://raw.githubusercontent.com/theos/theos/master/bin/install-theos)"
+        echo "THEOS=$HOME/theos" >> $GITHUB_ENV
+        
+    - name: Build dylib
+      run: |
+        export THEOS=$HOME/theos
+        make
+        
+    - name: Upload dylib
+      uses: actions/upload-artifact@v4
+      with:
+        name: CoconoteAutoRecording.dylib
+        path: .theos/obj/debug/CoconoteAutoRecording.dylib
