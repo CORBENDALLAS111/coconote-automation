@@ -1,0 +1,49 @@
+name: Build CoconoteAutoRecording.dylib
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      
+    - name: Install dependencies
+      run: |
+        brew install ldid xz
+        
+    - name: Install Theos (manual)
+      run: |
+        export THEOS="$HOME/theos"
+        git clone --recursive https://github.com/theos/theos.git $THEOS
+        mkdir -p $THEOS/sdks
+        echo "THEOS=$THEOS" >> $GITHUB_ENV
+        
+    - name: Download iOS SDK
+      run: |
+        export THEOS="$HOME/theos"
+        cd $THEOS/sdks
+        curl -L -o sdk.zip "https://github.com/theos/sdks/archive/refs/heads/master.zip" || true
+        if [ -f "sdk.zip" ]; then
+          unzip -q sdk.zip || true
+          mv sdks-master/*.sdk . 2>/dev/null || true
+          rm -rf sdks-master sdk.zip
+        fi
+        
+    - name: Build
+      run: |
+        export THEOS="$HOME/theos"
+        export PATH=$THEOS/bin:$PATH
+        make clean 2>/dev/null || true
+        make
+        
+    - name: Upload
+      uses: actions/upload-artifact@v4
+      with:
+        name: CoconoteAutoRecording.dylib
+        path: .theos/obj/debug/CoconoteAutoRecording.dylib
