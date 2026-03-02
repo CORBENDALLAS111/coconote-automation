@@ -8,22 +8,22 @@ on:
 jobs:
   build:
     runs-on: macos-latest
-    
+
     steps:
     - name: Checkout
       uses: actions/checkout@v4
-      
+
     - name: Install dependencies
       run: |
         brew install ldid xz
-        
+
     - name: Install Theos (manual)
       run: |
         export THEOS="$HOME/theos"
         git clone --recursive https://github.com/theos/theos.git $THEOS
         mkdir -p $THEOS/sdks
         echo "THEOS=$THEOS" >> $GITHUB_ENV
-        
+
     - name: Download iOS SDK
       run: |
         export THEOS="$HOME/theos"
@@ -34,16 +34,60 @@ jobs:
           mv sdks-master/*.sdk . 2>/dev/null || true
           rm -rf sdks-master sdk.zip
         fi
-        
-    - name: Build
+
+    - name: Build dylib
       run: |
-        export THEOS="$HOME/theos"
+        export THEOS=$HOME/theos
         export PATH=$THEOS/bin:$PATH
         make clean 2>/dev/null || true
         make
-        
-    - name: Upload
+
+    - name: Fix dylib for LiveContainer
+      run: |
+        # Find the built dylib
+        if [ -f ".theos/obj/debug/CoconoteAutoRecording.dylib" ]; then
+          DYLIB=".theos/obj/debug/CoconoteAutoRecording.dylib"
+        elif [ -f ".theos/obj/CoconoteAutoRecording.dylib" ]; then
+          DYLIB=".theos/obj/CoconoteAutoRecording.dylib"
+        else
+          echo "Dylib not found"
+          exit 1
+        fi
+
+        echo "Original dylib:"
+        otool -L $DYLIB | head -10
+
+        # Fix the CydiaSubstrate path for LiveContainer
+        # Change from /Library/Frameworks/CydiaSubstrate.framework/CydiaSubstrate to @rpath
+        install_name_tool -change \
+          "/Library/Frameworks/CydiaSubstrate.framework/CydiaSubstrate" \
+          "@rpath/CydiaSubstrate.framework/CydiaSubstrate" \
+          "$DYLIB"
+
+        echo ""
+        echo "Fixed dylib:"
+        otool -L $DYLIB | head -10
+
+        # Verify fix worked
+        if otool -L $DYLIB | grep -q "/Library/Frameworks/CydiaSubstrate.framework"; then
+          echo "ERROR: Path not changed!"
+          exit 1
+        fi
+
+        echo "✓ Dylib patched for LiveContainer"
+
+    - name: Prepare artifact
+      run: |
+        mkdir -p output
+        if [ -f ".theos/obj/debug/CoconoteAutoRecording.dylib" ]; then
+          cp ".theos/obj/debug/CoconoteAutoRecording.dylib" output/
+        elif [ -f ".theos/obj/CoconoteAutoRecording.dylib" ]; then
+          cp ".theos/obj/CoconoteAutoRecording.dylib" output/
+        fi
+        file output/CoconoteAutoRecording.dylib
+
+    - name: Upload dylib
       uses: actions/upload-artifact@v4
       with:
         name: CoconoteAutoRecording.dylib
-        path: .theos/obj/debug/CoconoteAutoRecording.dylib
+        path: output/CoconoteAutoRecording.dylib
